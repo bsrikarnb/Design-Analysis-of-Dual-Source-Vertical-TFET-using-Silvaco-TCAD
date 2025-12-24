@@ -1,0 +1,152 @@
+go atlas
+
+# ---------- VARIABLES ----------
+# Two oxide layers
+set g=0.004
+set toxh=0.001
+set toxs=0.001
+
+# ---------- MESH ----------
+mesh space.mult=1.0
+
+x.m loc=0      spacing=0.005
+x.m loc=0.018  spacing=0.005
+x.m loc=0.020  spacing=0.0005
+x.m loc=0.020+$toxs                      spacing=0.0005
+x.m loc=0.020+$toxs+$toxh                spacing=0.005
+x.m loc=0.020+$toxs+$toxh+$g             spacing=0.0005
+x.m loc=0.020+$toxs+$toxh+$g+$toxh       spacing=0.005
+x.m loc=0.020+$toxs+$toxh+$g+$toxh+$toxs spacing=0.005
+x.m loc=0.022+$toxs+$toxh+$g+$toxh+$toxs spacing=0.005
+x.m loc=0.040+$toxs+$toxh+$g+$toxh+$toxs spacing=0.005
+
+y.m loc=0.0    spacing=0.005
+y.m loc=0.005  spacing=0.0005
+y.m loc=0.051  spacing=0.001
+y.m loc=0.053  spacing=0.001
+y.m loc=0.055  spacing=0.001
+y.m loc=0.060  spacing=0.005
+y.m loc=0.065  spacing=0.0005
+y.m loc=0.070  spacing=0.005
+y.m loc=0.075  spacing=0.005
+
+# ---------- REGIONS ----------
+region num=1 MATERIAL=silicon x.min=0 y.min=0
+region num=2 MATERIAL=sio2   x.min=0.020 x.max=0.020+$toxs+$toxh+$g+$toxh+$toxs y.max=0.055
+region num=3 MATERIAL=hfo2   x.min=0.020+$toxs x.max=0.020+$toxs+$toxh+$g+$toxh y.max=0.053
+
+region num=4 MATERIAL=silicon x.min=0.0   x.max=0.020 y.min=0.005 y.max=0.055
+region num=5 MATERIAL=silicon x.min=0.020+$toxs+$toxh+$g+$toxh+$toxs x.max=0.040+$toxs+$toxh+$g+$toxh+$toxs y.min=0.005 y.max=0.055
+region num=6 MATERIAL=silicon x.min=0     y.min=0.055 y.max=0.065
+region num=7 MATERIAL=silicon x.min=0     y.min=0.065 y.max=0.070
+
+# ---------- ELECTRODES ----------
+elect num=1 name=gate   x.min=0.020+$toxs+$toxh x.max=0.020+$toxs+$toxh+$g y.max=0.051
+elect num=2 name=source x.min=0     x.max=0.020 y.max=0.005
+elect num=3 name=source x.min=0.020+$toxs+$toxh+$g+$toxh+$toxs x.max=0.040+$toxs+$toxh+$g+$toxh+$toxs y.max=0.005
+# FIX: make drain width consistent with silicon span
+elect num=4 name=drain  x.min=0     x.max=0.040+$toxs+$toxh+$g+$toxh+$toxs y.min=0.070 y.max=0.075
+
+# extra mesh refinement near corners (optional but harmless)
+qtx.mesh loc=0.015 spac=0.0005
+qtx.mesh loc=0.050 spac=0.0005
+qty.mesh loc=0     spac=0.0005
+qty.mesh loc=0.060 spac=0.0005
+
+# ---------- DOPING ----------
+doping uniform p.type conc=1e20 x.min=0 x.max=0.020 y.min=0.005 y.max=0.055
+doping uniform p.type conc=1e20 x.min=0.022+$toxs+$toxh+$g+$toxh+$toxs x.max=0.040+$toxs+$toxh+$g+$toxh+$toxs y.min=0.005 y.max=0.055
+doping uniform n.type conc=1e17 x.min=0 x.max=0.040+$toxs+$toxh+$g+$toxh+$toxs y.min=0.055 y.max=0.065
+doping uniform n.type conc=1e19 x.min=0 x.max=0.040+$toxs+$toxh+$g+$toxh+$toxs y.min=0.065 y.max=0.070
+
+# ---------- CONTACTS ----------
+contact name=gate workfunction=3.8
+contact name=drain
+contact name=source
+
+# ---------- MODELS ----------
+models conmob bgn srh cvt fermi ni.fermi qtunn.dir=ydir bbt.nonlocal
+
+# ---------- METHOD ----------
+method newton trap
+
+# ============================================================
+# DC CHARACTERISTICS TO GENERATE LOGS
+# ============================================================
+
+# --- Output 1: Output (Id–Vd) at fixed Vg=1.8 V
+solve init
+solve vgate=1.8
+log outf=dstfet_dr_char.log master
+solve vsource=0 vdrain=0 vstep=0.05 vfinal=2.6 name=drain
+save outf=dstfet_dr_char.str
+log off
+
+# --- Output 2: Transfer (Id–Vg) at Vd=2.6 V
+solve init
+solve vdrain=2.6
+log outf=dstfet_tr_char.log master
+solve vsource=0 vgate=0 vstep=0.05 vfinal=1.8 name=gate
+save outf=dstfet_tr_char.str
+log off
+
+# --- Output 3: Transfer (Id–Vg) at Vd=0.05 V  (for DIBL Vt_low)
+solve init
+solve vdrain=0
+solve vdrain=0.01
+solve vdrain=0.02
+solve vdrain=0.03
+solve vdrain=0.04
+solve vdrain=0.05
+log outf=dstfet_20_Vd_005.log master
+solve name=gate vgate=0 vstep=0.05 vfinal=1
+save outf=dstfet_20_Vd_005.str
+log off
+
+# --- Output 4: Transfer (Id–Vg) at Vd=1.0 V  (for DIBL Vt_high)
+solve init
+solve prev
+solve vdrain=0
+solve vdrain=0.05
+solve vdrain=0.1
+solve vdrain=0.2
+solve vdrain=0.4
+solve vdrain=0.6
+solve vdrain=0.8
+solve vdrain=1
+log outf=dstfet_20_Vd_1.log master
+solve name=gate vgate=0 vstep=0.05 vfinal=1
+save outf=dstfet_20_Vd_1.str
+log off
+
+# (optional viewers)
+tonyplot dstfet_20_Vd_005.log
+tonyplot dstfet_20_Vd_1.log
+tonyplot dstfet_dr_char.log
+tonyplot dstfet_tr_char.log
+
+# ============================================================
+# EXTRACTION (fixed init, no weird spaces)
+# ============================================================
+go atlas
+
+# Vt at low Vd = 0.05 V
+extract init infile="dstfet_20_Vd_005.log"
+extract name="vt1" x.val from curve(v."gate", log10(abs(i."drain"))) where y.val=-13.8
+
+# Vt at high Vd = 1.0 V
+extract init infile="dstfet_20_Vd_1.log"
+extract name="vt2" x.val from curve(v."gate", log10(abs(i."drain"))) where y.val=--5.3
+
+# DIBL
+extract name="dibl" ($vt1-$vt2)/(1.0-0.05)
+
+# Subthreshold slope, IOFF, ION, and a clean Vt from the transfer at Vd=2.6 V
+extract init infile="dstfet_tr_char.log"
+extract name="subvt" 1.0/slope(maxslope(curve(v."gate", log10(abs(i."drain")))))
+extract name="Ioff_n" y.val from curve(v."gate", i."drain") where x.val=0
+extract name="Ion_n"  y.val from curve(v."gate", i."drain") where x.val=1
+extract name="Ion_Ioff" $Ion_n/$Ioff_n
+extract name="vt" x.val from curve(v."gate", log10(abs(i."drain"))) where y.val=-5.39
+
+quit
